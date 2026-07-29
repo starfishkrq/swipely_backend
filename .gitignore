@@ -1,16 +1,38 @@
-# Dependencies
 node_modules/
-
-# Build output
 dist/
-*.tsbuildinfo
 
-# Test / tool caches
-.vite/
-coverage/
-*.log
-
-# Environment
+# Environment variables
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Coverage and test reports
+coverage/
+*.lcov
+.nyc_output/
+.vite/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files / diagnostic output
+tsc_errors.txt
+*.pid
+*.seed
+*.pid.lock
+*.tsbuildinfo
