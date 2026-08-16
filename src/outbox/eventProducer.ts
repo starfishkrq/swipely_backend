@@ -1,4 +1,5 @@
 import type { Knex } from "knex";
+import { createHash } from "crypto";
 import { logger } from "../utils/logger.js";
 
 // Match existing event types from webhook service
@@ -25,6 +26,7 @@ export interface OutboxEvent<T = any> {
   eventType: OutboxEventType;
   payload: T;
   metadata?: Record<string, any>;
+  idempotencyKey?: string;
 }
 
 export interface OutboxEventRecord {
@@ -35,6 +37,7 @@ export interface OutboxEventRecord {
   eventType: string;
   payload: any;
   metadata: any;
+  idempotencyKey?: string;
   status: "pending" | "processing" | "delivered" | "failed";
   retryCount: number;
   retryAfter: Date;
@@ -47,6 +50,15 @@ export class OutboxProducer {
   constructor(private db: Knex) {}
 
   /**
+   * Generate a deterministic idempotency key for an event
+   * Uses SHA-256 hash of aggregate type, aggregate id, event type, and payload
+   */
+  private generateIdempotencyKey<T>(event: OutboxEvent<T>): string {
+    const keyString = `${event.aggregateType}:${event.aggregateId}:${event.eventType}:${JSON.stringify(event.payload)}`;
+    return createHash("sha256").update(keyString).digest("hex");
+  }
+
+  /**
    * Publish an event transactionally within an existing transaction
    * This is the primary method for ensuring ACID compliance
    */
@@ -55,6 +67,9 @@ export class OutboxProducer {
     event: OutboxEvent<T>
   ): Promise<void> {
     try {
+      // Generate or use provided idempotency key
+      const idempotencyKey = event.idempotencyKey || this.generateIdempotencyKey(event);
+
       // Get next sequence number atomically
       const [{ get_next_outbox_sequence: sequenceNo }] = await tx.raw(
         "SELECT get_next_outbox_sequence(?, ?) as get_next_outbox_sequence",
@@ -73,6 +88,7 @@ export class OutboxProducer {
           timestamp: new Date().toISOString(),
           ...event.metadata,
         }),
+        idempotency_key: idempotencyKey,
         status: "pending",
         retry_count: 0,
         retry_after: new Date(),
@@ -299,6 +315,7 @@ export class OutboxProducer {
       eventType: row.event_type,
       payload: typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload,
       metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata,
+      idempotencyKey: row.idempotency_key,
       status: row.status,
       retryCount: row.retry_count,
       retryAfter: row.retry_after,

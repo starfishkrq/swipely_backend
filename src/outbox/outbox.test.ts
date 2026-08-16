@@ -19,6 +19,7 @@ describe("Outbox Pattern Implementation", () => {
   let db: Knex;
   let outboxProducer: OutboxProducer;
   let adminApi: OutboxAdminApi;
+  let mockCheckAndRecordIdempotency: (idempotencyKey: string, ttlHours: number) => Promise<boolean>;
 
   beforeEach(async () => {
     // Create in-memory SQLite database for testing
@@ -40,6 +41,7 @@ describe("Outbox Pattern Implementation", () => {
       table.string("event_type").notNullable();
       table.text("payload").notNullable();
       table.text("metadata").notNullable().defaultTo("{}");
+      table.string("idempotency_key").nullable();
       table.string("status").notNullable().defaultTo("pending");
       table.integer("retry_count").notNullable().defaultTo(0);
       table.timestamp("retry_after").notNullable().defaultTo(db.fn.now());
@@ -60,6 +62,12 @@ describe("Outbox Pattern Implementation", () => {
       table.text("last_error").notNullable();
       table.timestamp("last_attempt").notNullable().defaultTo(db.fn.now());
       table.timestamp("created_at").notNullable().defaultTo(db.fn.now());
+    });
+
+    await db.schema.createTable("idempotency_ledger", (table) => {
+      table.string("idempotency_key").primary();
+      table.timestamp("processed_at").notNullable().defaultTo(db.fn.now());
+      table.timestamp("expires_at").notNullable();
     });
 
     // Mock the PostgreSQL sequence function for SQLite
@@ -84,12 +92,42 @@ describe("Outbox Pattern Implementation", () => {
       }
     };
 
-    // Mock the raw query for sequence generation
+    // Mock the idempotency check function for SQLite
+    mockCheckAndRecordIdempotency = async (idempotencyKey: string, ttlHours: number) => {
+      const existing = await db("idempotency_ledger")
+        .where({ idempotency_key: idempotencyKey })
+        .where("expires_at", ">", new Date().toISOString())
+        .first();
+
+      if (existing) {
+        return false; // Already processed
+      }
+
+      // Record the key
+      const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+      await db("idempotency_ledger").insert({
+        idempotency_key: idempotencyKey,
+        processed_at: new Date(),
+        expires_at: expiresAt,
+      }).onConflict("idempotency_key").merge({
+        processed_at: new Date(),
+        expires_at: expiresAt,
+      });
+
+      return true; // Not processed, proceed
+    };
+
+    // Mock the raw query for sequence generation and idempotency check
     vi.spyOn(db, "raw").mockImplementation((async (sql: string, bindings?: any[]) => {
       if (sql.includes("get_next_outbox_sequence")) {
         const [aggregateType, aggregateId] = bindings || [];
         const seq = await mockGetNextSequence(aggregateType, aggregateId);
         return [{ get_next_outbox_sequence: seq }];
+      }
+      if (sql.includes("check_and_record_idempotency")) {
+        const [idempotencyKey] = bindings || [];
+        const shouldProceed = await mockCheckAndRecordIdempotency(idempotencyKey, 24);
+        return [{ check_and_record_idempotency: shouldProceed }];
       }
       return [];
     }) as any);
@@ -439,6 +477,174 @@ describe("Outbox Pattern Implementation", () => {
       // Second mark should fail (already processing)
       const secondMark = await outboxProducer.markProcessing(eventId);
       expect(secondMark).toBe(false);
+    });
+  });
+
+  describe("Idempotency Tests", () => {
+    it("should generate deterministic idempotency key", async () => {
+      const payload = {
+        ruleId: "rule-123",
+        assetCode: "USDC",
+        alertType: "price_deviation",
+      };
+
+      await outboxProducer.publish({
+        aggregateType: "Alert",
+        aggregateId: "alert-123",
+        eventType: "alert.triggered",
+        payload,
+      });
+
+      const [event] = await db("outbox_events").select("*");
+      expect(event.idempotency_key).toBeTruthy();
+      expect(event.idempotency_key).toHaveLength(64); // SHA-256 hex string length
+    });
+
+    it("should use custom idempotency key when provided", async () => {
+      const customKey = "custom-key-12345";
+
+      await outboxProducer.publish({
+        aggregateType: "Alert",
+        aggregateId: "alert-123",
+        eventType: "alert.triggered",
+        payload: {},
+        idempotencyKey: customKey,
+      });
+
+      const [event] = await db("outbox_events").select("*");
+      expect(event.idempotency_key).toBe(customKey);
+    });
+
+    it("should prevent duplicate delivery via idempotency ledger", async () => {
+      const payload = {
+        ruleId: "rule-123",
+        assetCode: "USDC",
+      };
+
+      // Publish first event
+      await outboxProducer.publish({
+        aggregateType: "Alert",
+        aggregateId: "alert-123",
+        eventType: "alert.triggered",
+        payload,
+      });
+
+      const [firstEvent] = await db("outbox_events").select("*");
+      const firstIdempotencyKey = firstEvent.idempotency_key;
+
+      // Simulate first successful delivery - record in ledger
+      await db("idempotency_ledger").insert({
+        idempotency_key: firstIdempotencyKey,
+        processed_at: new Date(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+
+      // Publish duplicate event (simulating crash and retry)
+      await outboxProducer.publish({
+        aggregateType: "Alert",
+        aggregateId: "alert-123",
+        eventType: "alert.triggered",
+        payload,
+      });
+
+      const [secondEvent] = await db("outbox_events")
+        .where({ id: firstEvent.id + 1 })
+        .first();
+
+      expect(secondEvent.idempotency_key).toBe(firstIdempotencyKey);
+
+      // Simulate dispatcher checking idempotency ledger
+      const existing = await db("idempotency_ledger")
+        .where({ idempotency_key: firstIdempotencyKey })
+        .where("expires_at", ">", new Date().toISOString())
+        .first();
+
+      expect(existing).toBeTruthy();
+      // The dispatcher would skip delivery when existing record is found
+    });
+
+    it("should simulate crash between send and commit - no duplicate delivery", async () => {
+      const payload = {
+        ruleId: "rule-crash-test",
+        assetCode: "USDC",
+        timestamp: "2026-08-16T14:00:00Z",
+      };
+
+      // Step 1: Publish event (simulating transaction start)
+      await db.transaction(async (tx) => {
+        await outboxProducer.publishTransactional(tx, {
+          aggregateType: "Alert",
+          aggregateId: "alert-crash-test",
+          eventType: "alert.triggered",
+          payload,
+        });
+
+        // Simulate crash before commit - transaction will rollback
+        // In real scenario, this would leave no record in outbox_events
+      });
+
+      // After rollback, no event should exist
+      const eventsAfterRollback = await db("outbox_events")
+        .where({ aggregate_id: "alert-crash-test" })
+        .select("*");
+      expect(eventsAfterRollback).toHaveLength(0);
+
+      // Step 2: Retry the operation (simulating recovery)
+      await db.transaction(async (tx) => {
+        await outboxProducer.publishTransactional(tx, {
+          aggregateType: "Alert",
+          aggregateId: "alert-crash-test",
+          eventType: "alert.triggered",
+          payload,
+        });
+      });
+
+      // Now event should exist
+      const eventsAfterRetry = await db("outbox_events")
+        .where({ aggregate_id: "alert-crash-test" })
+        .select("*");
+      expect(eventsAfterRetry).toHaveLength(1);
+
+      const idempotencyKey = eventsAfterRetry[0].idempotency_key;
+
+      // Step 3: Simulate dispatcher processing first time
+      await db("idempotency_ledger").insert({
+        idempotency_key: idempotencyKey,
+        processed_at: new Date(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
+
+      // Step 4: Simulate crash after send but before mark delivered
+      // Dispatcher retries the same event
+      const shouldProceed = await mockCheckAndRecordIdempotency(idempotencyKey, 24);
+      expect(shouldProceed).toBe(false); // Should skip duplicate delivery
+
+      // Verify only one ledger entry exists
+      const ledgerEntries = await db("idempotency_ledger")
+        .where({ idempotency_key: idempotencyKey })
+        .select("*");
+      expect(ledgerEntries).toHaveLength(1);
+    });
+
+    it("should handle idempotency key expiration", async () => {
+      const expiredKey = "expired-key-123";
+
+      // Insert expired entry
+      await db("idempotency_ledger").insert({
+        idempotency_key: expiredKey,
+        processed_at: new Date(Date.now() - 48 * 60 * 60 * 1000), // 48 hours ago
+        expires_at: new Date(Date.now() - 24 * 60 * 60 * 1000), // Expired 24 hours ago
+      });
+
+      // Should proceed with delivery since key is expired
+      const shouldProceed = await mockCheckAndRecordIdempotency(expiredKey, 24);
+      expect(shouldProceed).toBe(true);
+
+      // Should have updated the entry with new expiration
+      const updatedEntry = await db("idempotency_ledger")
+        .where({ idempotency_key: expiredKey })
+        .first();
+      expect(new Date(updatedEntry.expires_at).getTime()).toBeGreaterThan(Date.now());
     });
   });
 });

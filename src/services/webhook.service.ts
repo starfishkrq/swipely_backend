@@ -421,6 +421,7 @@ export class WebhookService {
     eventType: WebhookEventType;
     payload: Record<string, any>;
     scheduledAt?: number;
+    idempotencyKey?: string;
   }): Promise<WebhookDelivery> {
     const db = getDatabase();
 
@@ -453,6 +454,7 @@ export class WebhookService {
       eventType: params.eventType,
       payload: params.payload,
       attemptNumber: 0,
+      idempotencyKey: params.idempotencyKey,
     };
 
     // Add to queue with optional delay for scheduled delivery
@@ -525,7 +527,7 @@ export class WebhookService {
   }
 
   public async processDelivery(job: Job): Promise<{ status: number; body: string }> {
-    const { deliveryId, webhookEndpointId, eventType, payload } = job.data;
+    const { deliveryId, webhookEndpointId, eventType, payload, idempotencyKey } = job.data;
 
     const endpoint = await this.getEndpoint(webhookEndpointId);
     if (!endpoint || !endpoint.isActive) {
@@ -535,12 +537,17 @@ export class WebhookService {
     const payloadString = JSON.stringify(payload);
     const signatureHeaders = this.generateSignatureHeaders(payloadString, endpoint.secret);
 
-    // Merge custom headers
-    const headers = {
+    // Merge custom headers with idempotency key
+    const headers: Record<string, string> = {
       ...signatureHeaders,
       ...endpoint.customHeaders,
       "User-Agent": "BridgeWatch-Webhook/1.0",
     };
+
+    // Add idempotency key header if present
+    if (idempotencyKey) {
+      headers["X-Idempotency-Key"] = idempotencyKey;
+    }
 
     const startTime = Date.now();
 
