@@ -102,6 +102,11 @@ export const ConfigSchemas = {
 
   // Price Aggregation
   REDIS_PRICE_CACHE_PREFIX: z.string(),
+  PRICE_PROVIDER_CACHE_TTL_SEC: z.number().int().min(1).max(86400),
+  SDEX_RATE_LIMIT_MAX: z.number().int().min(1).max(10000),
+  SDEX_RATE_LIMIT_WINDOW_MS: z.number().int().min(1000).max(3600000),
+  AMM_RATE_LIMIT_MAX: z.number().int().min(1).max(10000),
+  AMM_RATE_LIMIT_WINDOW_MS: z.number().int().min(1000).max(3600000),
 
   // Health Score Weights (must sum to 1.0)
   HEALTH_WEIGHT_LIQUIDITY: z.number().min(0).max(1),

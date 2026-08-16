@@ -24,6 +24,7 @@ const mockKnex = vi.hoisted(() => {
 });
 
 const auditLogMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const loggerInfoMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../src/database/connection.js", () => ({
   getDatabase: () => mockKnex,
@@ -34,7 +35,7 @@ vi.mock("../../src/services/audit.service.js", () => ({
 }));
 
 vi.mock("../../src/utils/logger.js", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: { info: loggerInfoMock, warn: vi.fn(), error: vi.fn() },
 }));
 
 function makeStateRow(overrides: Record<string, unknown> = {}) {
@@ -161,6 +162,10 @@ describe("ProviderCircuitBreakerService", () => {
       expect(auditLogMock).toHaveBeenCalledWith(
         expect.objectContaining({ action: "provider.circuit_breaker_recovered" })
       );
+      expect(loggerInfoMock).toHaveBeenCalledWith(
+        expect.objectContaining({ providerKey: "coingecko", toState: "closed" }),
+        expect.stringContaining("recovery succeeded")
+      );
     });
   });
 
@@ -183,6 +188,44 @@ describe("ProviderCircuitBreakerService", () => {
       });
 
       expect(await service.getFallbackProvider("coingecko")).toBe("coinmarketcap");
+    });
+  });
+
+  describe("runRecoveryProbeSweep", () => {
+    it("returns the provider keys that transitioned to half-open", async () => {
+      mockKnex.mockImplementation(() =>
+        createQueryBuilder([
+          makeStateRow({
+            state: "open",
+            opened_at: new Date(Date.now() - 120_000).toISOString(),
+            recovery_timeout_ms: 60_000,
+          }),
+        ])
+      );
+
+      const probed = await service.runRecoveryProbeSweep();
+
+      expect(probed).toEqual(["coingecko"]);
+      expect(loggerInfoMock).toHaveBeenCalledWith(
+        expect.objectContaining({ providerKey: "coingecko", toState: "half_open" }),
+        expect.stringContaining("half-open")
+      );
+    });
+
+    it("skips open breakers still inside their recovery timeout", async () => {
+      mockKnex.mockImplementation(() =>
+        createQueryBuilder([
+          makeStateRow({
+            state: "open",
+            opened_at: new Date().toISOString(),
+            recovery_timeout_ms: 60_000,
+          }),
+        ])
+      );
+
+      const probed = await service.runRecoveryProbeSweep();
+
+      expect(probed).toEqual([]);
     });
   });
 

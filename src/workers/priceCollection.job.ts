@@ -10,7 +10,17 @@ export async function processPriceCollection(job: Job) {
 
   for (const asset of SUPPORTED_ASSETS) {
     try {
-      await priceService.getAggregatedPrice(asset.code);
+      const aggregated = await priceService.getAggregatedPrice(asset.code);
+      const staleSources = aggregated?.sources.filter((s) => s.stale) ?? [];
+      if (staleSources.length > 0) {
+        logger.warn(
+          {
+            asset: asset.code,
+            staleSources: staleSources.map((s) => s.source),
+          },
+          "Price collection used cached/last-known-good provider values"
+        );
+      }
       logger.debug({ asset: asset.code }, "Fetched aggregated price");
     } catch (error) {
       logger.error({ asset: asset.code, error }, "Failed to fetch aggregated price in background job");

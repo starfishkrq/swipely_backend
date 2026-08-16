@@ -168,6 +168,21 @@ every variable the app reads.
 | `RATE_LIMIT_ENDPOINT_CONFIG` | Per-window limit for `/config` | `30` | — |
 | `RATE_LIMIT_ENDPOINT_HEALTH` | Per-window limit for `/health` | `1000` | — |
 
+### Price Provider Rate Limiting & Fallback
+
+Per-provider outbound rate limits for the price aggregation pipeline. Each provider
+keeps an independent Redis counter, so throttling one source never throttles the
+others. Throttled or tripped providers fall back to their last-known-good cached
+price (marked stale) instead of fabricating data.
+
+| Variable | Purpose | Default | Required |
+|---|---|---|---|
+| `SDEX_RATE_LIMIT_MAX` | Stellar DEX (Horizon order book) max requests per window | `30` | — |
+| `SDEX_RATE_LIMIT_WINDOW_MS` | Stellar DEX rate-limit window (ms) | `60000` | — |
+| `AMM_RATE_LIMIT_MAX` | Stellar AMM (Horizon liquidity pools) max requests per window | `30` | — |
+| `AMM_RATE_LIMIT_WINDOW_MS` | Stellar AMM rate-limit window (ms) | `60000` | — |
+| `PRICE_PROVIDER_CACHE_TTL_SEC` | TTL (s) for last-known-good per-provider price fallback | `300` | — |
+
 ### Email (SMTP)
 
 | Variable | Purpose | Default | Required |
