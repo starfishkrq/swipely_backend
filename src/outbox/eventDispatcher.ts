@@ -192,6 +192,26 @@ export class OutboxDispatcher {
           return;
         }
 
+        // Check idempotency ledger to prevent duplicate delivery
+        if (event.idempotency_key) {
+          const [{ check_and_record_idempotency: shouldProceed }] = await tx.raw(
+            "SELECT check_and_record_idempotency(?, 24) as check_and_record_idempotency",
+            [event.idempotency_key]
+          );
+
+          if (!shouldProceed) {
+            logger.info(
+              { eventId, idempotencyKey: event.idempotency_key },
+              "Event already processed (idempotency check), skipping delivery"
+            );
+            // Mark as delivered since it was already processed
+            await tx("outbox_events")
+              .where({ id: eventId })
+              .update({ status: "delivered", delivered_at: new Date() });
+            return;
+          }
+        }
+
         // Mark as processing
         const marked = await tx("outbox_events")
           .where({ id: eventId, status: "pending" })
@@ -291,12 +311,13 @@ export class OutboxDispatcher {
     const webhookService = WebhookService.getInstance();
 
     if (event.eventType === "webhook.delivery") {
-      // Queue individual webhook delivery
+      // Queue individual webhook delivery with idempotency key
       await webhookService.queueDelivery({
         webhookEndpointId: event.payload.webhookEndpointId,
         eventType: event.payload.eventType,
         payload: event.payload.payload,
         scheduledAt: event.payload.scheduledAt,
+        idempotencyKey: event.idempotencyKey,
       });
     } else if (event.eventType === "webhook.batch_delivery") {
       // Queue batch webhook delivery
