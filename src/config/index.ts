@@ -188,6 +188,18 @@ const envSchema = z.object({
   HORIZON_TIMEOUT_MS: z.coerce.number().default(500),
   REDIS_CACHE_TTL_SEC: z.coerce.number().default(30),
   REDIS_PRICE_CACHE_PREFIX: z.string().default("price:aggregated"),
+  // Redis TTL (seconds) for per-provider last-known-good price fallback values.
+  // Kept longer than the fresh aggregate TTL so a throttled/tripped provider
+  // can still serve a recent (stale-marked) price while it recovers.
+  PRICE_PROVIDER_CACHE_TTL_SEC: z.coerce.number().default(300),
+
+  // Per-provider rate limiting for price sources (requests per window).
+  // Each provider keeps an independent Redis counter so throttling one source
+  // never throttles the others.
+  SDEX_RATE_LIMIT_MAX: z.coerce.number().default(30),
+  SDEX_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
+  AMM_RATE_LIMIT_MAX: z.coerce.number().default(30),
+  AMM_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
 
   // WebSocket — set to a strong random string in production
   WS_AUTH_SECRET: z.string().optional(),

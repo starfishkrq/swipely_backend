@@ -218,10 +218,14 @@ export class ProviderCircuitBreakerService {
     return this.getState(providerKey);
   }
 
-  /** Scheduled sweep: flips any open breaker past its recovery timeout into half-open. */
-  async runRecoveryProbeSweep(): Promise<number> {
+  /**
+   * Scheduled sweep: flips any open breaker past its recovery timeout into
+   * half-open. Returns the provider keys that transitioned so callers can
+   * log exactly which providers are recovering.
+   */
+  async runRecoveryProbeSweep(): Promise<string[]> {
     const openBreakers = await this.db("provider_circuit_breaker_state").where({ state: "open" });
-    let probed = 0;
+    const probed: string[] = [];
 
     for (const row of openBreakers) {
       const state = this.mapRow(row);
@@ -230,7 +234,7 @@ export class ProviderCircuitBreakerService {
       const openedAt = state.openedAt ? new Date(state.openedAt).getTime() : 0;
       if (Date.now() >= openedAt + state.recoveryTimeoutMs) {
         await this.transition(state.providerKey, "open", "half_open", "scheduled recovery probe sweep");
-        probed++;
+        probed.push(state.providerKey);
       }
     }
 
@@ -268,6 +272,18 @@ export class ProviderCircuitBreakerService {
 
     await this.db("provider_circuit_breaker_state").where({ provider_key: providerKey }).update(updates);
     await this.recordTransition(providerKey, fromState, toState, reason);
+
+    if (toState === "half_open") {
+      logger.info(
+        { providerKey, fromState, toState, reason },
+        "Provider circuit breaker entering half-open (recovery probe)"
+      );
+    } else if (toState === "closed") {
+      logger.info(
+        { providerKey, fromState, toState, reason },
+        "Provider circuit breaker closed (recovery succeeded)"
+      );
+    }
   }
 
   private async recordTransition(providerKey: string, fromState: BreakerState, toState: BreakerState, reason: string): Promise<void> {

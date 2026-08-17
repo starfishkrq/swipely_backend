@@ -77,6 +77,11 @@ export const SAFE_DEFAULTS: Partial<Record<ConfigKey, any>> = {
 
   // Price Aggregation
   REDIS_PRICE_CACHE_PREFIX: "price:aggregated",
+  PRICE_PROVIDER_CACHE_TTL_SEC: 300,
+  SDEX_RATE_LIMIT_MAX: 30,
+  SDEX_RATE_LIMIT_WINDOW_MS: 60000,
+  AMM_RATE_LIMIT_MAX: 30,
+  AMM_RATE_LIMIT_WINDOW_MS: 60000,
 
   // Health Score Weights (must sum to 1.0)
   HEALTH_WEIGHT_LIQUIDITY: 0.25,

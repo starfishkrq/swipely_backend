@@ -93,11 +93,27 @@ export async function processPriceAggregatorJob(job: { id?: string; data: { symb
     await routeDeviationAlert(symbol, deviation);
   }
 
+  const staleSources = aggregatedPrice?.sources.filter((s) => s.stale) ?? [];
+  if (staleSources.length > 0) {
+    logger.warn(
+      {
+        symbol,
+        staleSources: staleSources.map((s) => s.source),
+      },
+      "Price aggregation used cached/last-known-good provider values"
+    );
+  }
+
   if (aggregatedPrice) {
     await persistAggregatedPrice(aggregatedPrice);
   }
 
-  return { success: true, symbol, price: aggregatedPrice };
+  return {
+    success: true,
+    symbol,
+    price: aggregatedPrice,
+    staleSourceCount: staleSources.length,
+  };
 }
 
 /**

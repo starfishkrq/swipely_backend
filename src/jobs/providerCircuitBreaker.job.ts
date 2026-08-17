@@ -6,16 +6,19 @@ const PROBE_SWEEP_INTERVAL_MS = config.PROVIDER_BREAKER_PROBE_INTERVAL_MS;
 
 let probeSweepInterval: NodeJS.Timeout | null = null;
 
-export async function runRecoveryProbeSweep(): Promise<number> {
+export async function runRecoveryProbeSweep(): Promise<string[]> {
   try {
     const probed = await providerCircuitBreakerService.runRecoveryProbeSweep();
-    if (probed > 0) {
-      logger.info({ probed }, "Provider circuit breaker recovery probe sweep transitioned breakers to half-open");
+    if (probed.length > 0) {
+      logger.info(
+        { probed, count: probed.length },
+        "Provider circuit breaker recovery probe sweep transitioned breakers to half-open"
+      );
     }
     return probed;
   } catch (err) {
     logger.error({ error: err }, "Provider circuit breaker recovery probe sweep failed");
-    return 0;
+    return [];
   }
 }
 
