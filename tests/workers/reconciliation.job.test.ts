@@ -84,6 +84,37 @@ describe("reconciliation job", () => {
     );
   });
 
+  it("records a transient failure, releases the lock, and rethrows for retry", async () => {
+    const error = new Error("bridge RPC timeout");
+    verifySupplyMock.mockRejectedValueOnce(error);
+    const processReconciliation = createReconciliationProcessor({
+      bridgeService: { verifySupply: verifySupplyMock } as any,
+      reconciliationService: { startRun: startRunMock, finishRun: finishRunMock } as any,
+      acquireLock: acquireLockMock as any,
+      releaseLock: releaseLockMock as any,
+      lockTtlMs: 50,
+      alertOnMismatch: alertOnMismatchMock as any,
+    });
+
+    await expect(
+      processReconciliation({
+        id: "job-retry",
+        data: { assetCode: "USDC" },
+        attemptsMade: 2,
+      } as any)
+    ).rejects.toBe(error);
+
+    expect(startRunMock).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 3 })
+    );
+    expect(finishRunMock).toHaveBeenCalledWith({
+      id: "run-1",
+      status: "failed",
+      error: "bridge RPC timeout",
+    });
+    expect(releaseLockMock).toHaveBeenCalledOnce();
+  });
+
   describe("reconciliation alerting wiring (issue #8)", () => {
     it("invokes the alerting helper with the real compared values on a mismatch", async () => {
       verifySupplyMock.mockResolvedValueOnce({

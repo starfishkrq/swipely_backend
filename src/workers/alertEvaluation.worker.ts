@@ -17,10 +17,14 @@ export interface AlertEvaluationJobData {
   snapshots: MetricSnapshot[];
 }
 
-export const alertEvaluationWorker = new Worker<AlertEvaluationJobData>(
-  QUEUE_NAME,
-  async (job) => {
-    const alertService = new AlertService();
+export function createAlertEvaluationProcessor(
+  createAlertService: () => Pick<AlertService, "batchEvaluate"> = () => new AlertService()
+) {
+  return async function processAlertEvaluation(job: {
+    id?: string;
+    data: AlertEvaluationJobData;
+  }) {
+    const alertService = createAlertService();
     const { snapshots } = job.data;
 
     logger.info(
@@ -36,7 +40,12 @@ export const alertEvaluationWorker = new Worker<AlertEvaluationJobData>(
     );
 
     return { success: true, alertCount: events.length, events };
-  },
+  };
+}
+
+export const alertEvaluationWorker = new Worker<AlertEvaluationJobData>(
+  QUEUE_NAME,
+  createAlertEvaluationProcessor(),
   { connection, concurrency: 1 }
 );
 

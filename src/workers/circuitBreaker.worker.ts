@@ -4,7 +4,7 @@ import { logger } from "../utils/logger.js";
 import { getDatabase } from "../database/connection.js";
 import { getCircuitBreakerService, PauseScope, PauseLevel } from "../services/circuitBreaker.service.js";
 
-interface CircuitBreakerTriggerData {
+export interface CircuitBreakerTriggerData {
   alertId: string;
   alertType: string;
   assetCode?: string;
@@ -32,31 +32,34 @@ export const circuitBreakerQueue = isTestEnv
       },
     });
 
-export const circuitBreakerWorker = isTestEnv
-  ? null
-  : new Worker<CircuitBreakerTriggerData>(
-      "circuit-breaker",
-      async (job: Job<CircuitBreakerTriggerData>) => {
-        const { alertId, alertType, assetCode, bridgeId, severity, value, threshold } = job.data;
+export function createCircuitBreakerProcessor(deps?: {
+  getCircuitBreakerService?: typeof getCircuitBreakerService;
+  getDatabase?: typeof getDatabase;
+}) {
+  const getCircuitBreaker = deps?.getCircuitBreakerService ?? getCircuitBreakerService;
+  const getDb = deps?.getDatabase ?? getDatabase;
 
-        logger.info(
-          {
-            alertId,
-            alertType,
-            assetCode,
-            bridgeId,
-            severity,
-            value,
-            threshold,
-          },
-          "Processing circuit breaker trigger"
-        );
+  return async function processCircuitBreakerTrigger(job: Job<CircuitBreakerTriggerData>) {
+    const { alertId, alertType, assetCode, bridgeId, severity, value, threshold } = job.data;
 
-        const circuitBreaker = getCircuitBreakerService();
-        if (!circuitBreaker) {
-          logger.warn("Circuit breaker service not configured, skipping trigger");
-          return;
-        }
+    logger.info(
+      {
+        alertId,
+        alertType,
+        assetCode,
+        bridgeId,
+        severity,
+        value,
+        threshold,
+      },
+      "Processing circuit breaker trigger"
+    );
+
+    const circuitBreaker = getCircuitBreaker();
+    if (!circuitBreaker) {
+      logger.warn("Circuit breaker service not configured, skipping trigger");
+      return;
+    }
 
     try {
       // Determine pause scope and level based on alert type and severity
@@ -130,7 +133,7 @@ export const circuitBreakerWorker = isTestEnv
       // For now, log the trigger for manual intervention
 
       // Store the trigger in database for audit
-      const db = getDatabase();
+      const db = getDb();
       await db("circuit_breaker_triggers").insert({
         alert_id: alertId,
         alert_type: alertType,
@@ -147,12 +150,18 @@ export const circuitBreakerWorker = isTestEnv
       });
 
       logger.info({ alertId }, "Circuit breaker trigger processed successfully");
-
     } catch (error) {
       logger.error({ err: error }, "Circuit breaker trigger failed");
       throw error;
     }
-  },
+  };
+}
+
+export const circuitBreakerWorker = isTestEnv
+  ? null
+  : new Worker<CircuitBreakerTriggerData>(
+      "circuit-breaker",
+      createCircuitBreakerProcessor(),
   {
     connection: {
       host: config.REDIS_HOST,
