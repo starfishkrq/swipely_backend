@@ -1,5 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { TransactionService } from "../../services/transaction.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  TransactionsListQuerySchema,
+  TransactionsExportQuerySchema,
+  FetchTransactionsBodySchema,
+  BackfillTransactionsBodySchema,
+  DetectNewTransactionsBodySchema,
+  TransactionSyncStateParamsSchema,
+} from "../validations/transactions.schema.js";
 
 export async function transactionsRoutes(server: FastifyInstance) {
   const transactionService = new TransactionService();
@@ -19,6 +28,7 @@ export async function transactionsRoutes(server: FastifyInstance) {
   }>(
     "/",
     {
+      preHandler: validateRequest({ query: TransactionsListQuerySchema }),
       schema: {
         tags: ["Transactions"],
         summary: "List stored transactions",
@@ -83,6 +93,7 @@ export async function transactionsRoutes(server: FastifyInstance) {
   }>(
     "/export",
     {
+      preHandler: validateRequest({ query: TransactionsExportQuerySchema }),
       schema: {
         tags: ["Transactions"],
         summary: "Export stored transactions as CSV",
@@ -131,6 +142,7 @@ export async function transactionsRoutes(server: FastifyInstance) {
   }>(
     "/fetch",
     {
+      preHandler: validateRequest({ body: FetchTransactionsBodySchema }),
       schema: {
         tags: ["Transactions"],
         summary: "Fetch latest transactions from Horizon for an asset",
@@ -178,6 +190,7 @@ export async function transactionsRoutes(server: FastifyInstance) {
   }>(
     "/backfill",
     {
+      preHandler: validateRequest({ body: BackfillTransactionsBodySchema }),
       schema: {
         tags: ["Transactions"],
         summary: "Backfill historical transactions for an asset",
@@ -220,6 +233,7 @@ export async function transactionsRoutes(server: FastifyInstance) {
   }>(
     "/detect-new",
     {
+      preHandler: validateRequest({ body: DetectNewTransactionsBodySchema }),
       schema: {
         tags: ["Transactions"],
         summary: "Detect and store newly seen Horizon transactions",
@@ -253,6 +267,7 @@ export async function transactionsRoutes(server: FastifyInstance) {
   }>(
     "/sync-state/:assetCode/:assetIssuer",
     {
+      preHandler: validateRequest({ params: TransactionSyncStateParamsSchema }),
       schema: {
         tags: ["Transactions"],
         summary: "Get transaction fetch sync cursor and error status",

@@ -6,6 +6,14 @@ import {
   type DeliveryChannel,
   type DigestFrequency,
 } from "../../services/statusSubscription.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  SubscriptionUserParamsSchema,
+  SubscriptionIdParamsSchema,
+  CreateSubscriptionBodySchema,
+  UpdateSubscriptionBodySchema,
+  NotifySubscriptionBodySchema,
+} from "../validations/statusSubscriptions.schema.js";
 
 const ENTITY_TYPES: EntityType[] = ["asset", "bridge", "service"];
 const TRIGGER_STATUSES: TriggerStatus[] = ["degraded", "down", "recovered", "any"];
@@ -47,6 +55,7 @@ export async function statusSubscriptionsRoutes(server: FastifyInstance) {
   }>(
     "/:userId",
     {
+      preHandler: validateRequest({ params: SubscriptionUserParamsSchema, body: CreateSubscriptionBodySchema }),
       schema: {
         tags: ["Status Subscriptions"],
         summary: "Create a status change subscription",
@@ -84,6 +93,7 @@ export async function statusSubscriptionsRoutes(server: FastifyInstance) {
   server.get<{ Params: { userId: string } }>(
     "/:userId",
     {
+      preHandler: validateRequest({ params: SubscriptionUserParamsSchema }),
       schema: {
         tags: ["Status Subscriptions"],
         summary: "List all subscriptions for a user",
@@ -109,6 +119,7 @@ export async function statusSubscriptionsRoutes(server: FastifyInstance) {
   server.get<{ Params: { userId: string; id: string } }>(
     "/:userId/:id",
     {
+      preHandler: validateRequest({ params: SubscriptionIdParamsSchema }),
       schema: {
         tags: ["Status Subscriptions"],
         summary: "Get a single subscription",
@@ -148,6 +159,7 @@ export async function statusSubscriptionsRoutes(server: FastifyInstance) {
   }>(
     "/:userId/:id",
     {
+      preHandler: validateRequest({ params: SubscriptionIdParamsSchema, body: UpdateSubscriptionBodySchema }),
       schema: {
         tags: ["Status Subscriptions"],
         summary: "Update a subscription",
@@ -183,6 +195,7 @@ export async function statusSubscriptionsRoutes(server: FastifyInstance) {
   server.delete<{ Params: { userId: string; id: string } }>(
     "/:userId/:id",
     {
+      preHandler: validateRequest({ params: SubscriptionIdParamsSchema }),
       schema: {
         tags: ["Status Subscriptions"],
         summary: "Delete a subscription",
@@ -207,6 +220,7 @@ export async function statusSubscriptionsRoutes(server: FastifyInstance) {
   server.get<{ Params: { userId: string; id: string } }>(
     "/:userId/:id/audit",
     {
+      preHandler: validateRequest({ params: SubscriptionIdParamsSchema }),
       schema: {
         tags: ["Status Subscriptions"],
         summary: "Get audit trail for a subscription",
@@ -254,6 +268,7 @@ export async function statusSubscriptionsRoutes(server: FastifyInstance) {
   }>(
     "/notify",
     {
+      preHandler: validateRequest({ body: NotifySubscriptionBodySchema }),
       schema: {
         tags: ["Status Subscriptions"],
         summary: "Trigger subscription notifications for a status change (internal)",

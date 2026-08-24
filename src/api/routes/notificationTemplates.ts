@@ -4,10 +4,20 @@ import {
   TemplateChannel,
   TemplateStatus,
 } from "../../services/notificationTemplate.service";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  TemplateIdParamsSchema,
+  CreateTemplateBodySchema,
+  UpdateTemplateBodySchema,
+  ApproveTemplateBodySchema,
+  PreviewTemplateBodySchema,
+  ValidateTemplateBodySchema,
+  ListTemplatesQuerySchema,
+} from "../validations/notificationTemplates.schema.js";
 
 export async function notificationTemplatesRoutes(server: FastifyInstance) {
   // Create template
-  server.post("/", async (request, reply) => {
+  server.post("/", { preHandler: validateRequest({ body: CreateTemplateBodySchema }) }, async (request, reply) => {
     const template = await notificationTemplateService.createTemplate(
       request.body as any,
     );
@@ -17,6 +27,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   // Get template
   server.get<{ Params: { templateId: string } }>(
     "/:templateId",
+    { preHandler: validateRequest({ params: TemplateIdParamsSchema }) },
     async (request, reply) => {
       const template = await notificationTemplateService.getTemplate(
         request.params.templateId,
@@ -32,7 +43,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   server.patch<{
     Params: { templateId: string };
     Body: { updates: any; updatedBy: string };
-  }>("/:templateId", async (request, reply) => {
+  }>("/:templateId", { preHandler: validateRequest({ params: TemplateIdParamsSchema, body: UpdateTemplateBodySchema }) }, async (request, reply) => {
     const template = await notificationTemplateService.updateTemplate(
       request.params.templateId,
       request.body.updates,
@@ -47,6 +58,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   // Submit for approval
   server.post<{ Params: { templateId: string } }>(
     "/:templateId/submit",
+    { preHandler: validateRequest({ params: TemplateIdParamsSchema }) },
     async (request, reply) => {
       await notificationTemplateService.submitForApproval(
         request.params.templateId,
@@ -60,6 +72,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   // Approve template
   server.post<{ Params: { templateId: string }; Body: { approvedBy: string } }>(
     "/:templateId/approve",
+    { preHandler: validateRequest({ params: TemplateIdParamsSchema, body: ApproveTemplateBodySchema }) },
     async (request, reply) => {
       await notificationTemplateService.approveTemplate(
         request.params.templateId,
@@ -72,6 +85,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   // Archive template
   server.post<{ Params: { templateId: string } }>(
     "/:templateId/archive",
+    { preHandler: validateRequest({ params: TemplateIdParamsSchema }) },
     async (request, reply) => {
       await notificationTemplateService.archiveTemplate(
         request.params.templateId,
@@ -84,7 +98,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   server.post<{
     Params: { templateId: string };
     Body: { variables: Record<string, string> };
-  }>("/:templateId/preview", async (request, _reply) => {
+  }>("/:templateId/preview", { preHandler: validateRequest({ params: TemplateIdParamsSchema, body: PreviewTemplateBodySchema }) }, async (request, _reply) => {
     const preview = await notificationTemplateService.previewTemplate(
       request.params.templateId,
       request.body.variables,
@@ -93,7 +107,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   });
 
   // Validate variables
-  server.post("/validate", async (request, _reply) => {
+  server.post("/validate", { preHandler: validateRequest({ body: ValidateTemplateBodySchema }) }, async (request, _reply) => {
     const { body, subject, variables } = request.body as any;
     const validation = notificationTemplateService.validateVariables(
       body,
@@ -104,7 +118,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   });
 
   // Get all templates
-  server.get("/", async (request, _reply) => {
+  server.get("/", { preHandler: validateRequest({ query: ListTemplatesQuerySchema }) }, async (request, _reply) => {
     const filters = request.query as any;
     const templates =
       await notificationTemplateService.getAllTemplates(filters);
@@ -114,6 +128,7 @@ export async function notificationTemplatesRoutes(server: FastifyInstance) {
   // Get template versions
   server.get<{ Params: { templateId: string } }>(
     "/:templateId/versions",
+    { preHandler: validateRequest({ params: TemplateIdParamsSchema }) },
     async (request, _reply) => {
       const versions = await notificationTemplateService.getTemplateVersions(
         request.params.templateId,

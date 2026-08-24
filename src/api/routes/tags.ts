@@ -1,5 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { TagSyncService } from "../../services/tagSync.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  AddTagBodySchema,
+  RemoveTagBodySchema,
+  SyncTagsBodySchema,
+  PropagateTagBodySchema,
+  FindTagsQuerySchema,
+  TagEntityParamsSchema,
+  TagAuditQuerySchema,
+} from "../validations/tags.schema.js";
 
 export async function tagsRoutes(server: FastifyInstance) {
   const tagService = new TagSyncService();
@@ -18,7 +28,7 @@ export async function tagsRoutes(server: FastifyInstance) {
       tag: string;
       source?: string;
     };
-  }>("/", async (request, reply) => {
+  }>("/", { preHandler: validateRequest({ body: AddTagBodySchema }) }, async (request, reply) => {
     const { entityType, entityId, tag, source } = request.body;
 
     if (!entityType || !entityId || !tag) {
@@ -44,7 +54,7 @@ export async function tagsRoutes(server: FastifyInstance) {
       tag: string;
       source?: string;
     };
-  }>("/", async (request, reply) => {
+  }>("/", { preHandler: validateRequest({ body: RemoveTagBodySchema }) }, async (request, reply) => {
     const { entityType, entityId, tag, source } = request.body;
 
     if (!entityType || !entityId || !tag) {
@@ -70,7 +80,7 @@ export async function tagsRoutes(server: FastifyInstance) {
       tags: string[];
       source?: string;
     };
-  }>("/sync", async (request, reply) => {
+  }>("/sync", { preHandler: validateRequest({ body: SyncTagsBodySchema }) }, async (request, reply) => {
     const { entityType, entityId, tags, source } = request.body;
 
     if (!entityType || !entityId || !Array.isArray(tags)) {
@@ -101,7 +111,7 @@ export async function tagsRoutes(server: FastifyInstance) {
       entityIds: string[];
       source?: string;
     };
-  }>("/propagate", async (request, reply) => {
+  }>("/propagate", { preHandler: validateRequest({ body: PropagateTagBodySchema }) }, async (request, reply) => {
     const { tag, entityType, entityIds, source } = request.body;
 
     if (!tag || !entityType || !Array.isArray(entityIds)) {
@@ -127,7 +137,7 @@ export async function tagsRoutes(server: FastifyInstance) {
   // GET /api/v1/tags/find?tag=xyz&type=asset - Find entities by tag
   server.get<{
     Querystring: { tag?: string; type?: string };
-  }>("/find", async (request, reply) => {
+  }>("/find", { preHandler: validateRequest({ query: FindTagsQuerySchema }) }, async (request, reply) => {
     const { tag, type } = request.query;
 
     if (!tag) {
@@ -141,7 +151,7 @@ export async function tagsRoutes(server: FastifyInstance) {
   // GET /api/v1/tags/:entityType/:entityId - Tags for a specific entity
   server.get<{
     Params: { entityType: string; entityId: string };
-  }>("/:entityType/:entityId", async (request, reply) => {
+  }>("/:entityType/:entityId", { preHandler: validateRequest({ params: TagEntityParamsSchema }) }, async (request, reply) => {
     const { entityType, entityId } = request.params;
 
     try {
@@ -157,7 +167,7 @@ export async function tagsRoutes(server: FastifyInstance) {
   server.get<{
     Params: { entityType: string; entityId: string };
     Querystring: { limit?: string };
-  }>("/:entityType/:entityId/audit", async (request, reply) => {
+  }>("/:entityType/:entityId/audit", { preHandler: validateRequest({ params: TagEntityParamsSchema, query: TagAuditQuerySchema }) }, async (request, reply) => {
     const { entityType, entityId } = request.params;
     const limit = request.query.limit ? parseInt(request.query.limit, 10) : undefined;
 

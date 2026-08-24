@@ -1,6 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { IncidentService, type IncidentSeverity, type IncidentStatus } from "../../services/incident.service.js";
 import { IncidentIngestionService, type RawIncidentPayload } from "../../services/incidentIngestion.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  ListIncidentsQuerySchema,
+  IncidentIdParamsSchema,
+  CreateIncidentBodySchema,
+  IngestIncidentBodySchema,
+  UpdateIncidentStatusBodySchema,
+  MarkIncidentReadBodySchema,
+  UnreadCountQuerySchema,
+  ReviewQueueQuerySchema,
+} from "../validations/incidents.schema.js";
 
 const incidentService = new IncidentService();
 const incidentIngestionService = new IncidentIngestionService();
@@ -22,6 +33,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   }>(
     "/",
     {
+      preHandler: validateRequest({ query: ListIncidentsQuerySchema }),
       schema: {
         tags: ["Incidents"],
         summary: "List bridge incidents",
@@ -58,6 +70,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   server.get<{ Params: { id: string } }>(
     "/:id/replay",
     {
+      preHandler: validateRequest({ params: IncidentIdParamsSchema }),
       schema: {
         tags: ["Incidents"],
         summary: "Get incident replay timeline",
@@ -83,6 +96,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   server.get<{ Params: { id: string } }>(
     "/:id",
     {
+      preHandler: validateRequest({ params: IncidentIdParamsSchema }),
       schema: {
         tags: ["Incidents"],
         summary: "Get a bridge incident by ID",
@@ -125,6 +139,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   }>(
     "/",
     {
+      preHandler: validateRequest({ body: CreateIncidentBodySchema }),
       schema: {
         tags: ["Incidents"],
         summary: "Create a bridge incident",
@@ -163,6 +178,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   server.post<{ Body: RawIncidentPayload }>(
     "/ingest",
     {
+      preHandler: validateRequest({ body: IngestIncidentBodySchema }),
       schema: {
         tags: ["Incidents"],
         summary: "Ingest incident payload from external source",
@@ -235,6 +251,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   server.get<{ Querystring: { limit?: string } }>(
     "/ingestion/review-queue",
     {
+      preHandler: validateRequest({ query: ReviewQueueQuerySchema }),
       schema: {
         tags: ["Incidents"],
         summary: "List pending incident ingestion review queue",
@@ -260,6 +277,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   server.patch<{ Params: { id: string }; Body: { status: IncidentStatus } }>(
     "/:id/status",
     {
+      preHandler: validateRequest({ params: IncidentIdParamsSchema, body: UpdateIncidentStatusBodySchema }),
       schema: {
         tags: ["Incidents"],
         summary: "Update incident status",
@@ -290,6 +308,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   server.post<{ Params: { id: string }; Body: { userSession: string } }>(
     "/:id/read",
     {
+      preHandler: validateRequest({ params: IncidentIdParamsSchema, body: MarkIncidentReadBodySchema }),
       schema: {
         tags: ["Incidents"],
         summary: "Mark an incident as read",
@@ -316,6 +335,7 @@ export async function incidentRoutes(server: FastifyInstance) {
   server.get<{ Querystring: { userSession: string } }>(
     "/unread/count",
     {
+      preHandler: validateRequest({ query: UnreadCountQuerySchema }),
       schema: {
         tags: ["Incidents"],
         summary: "Get unread incident count for a session",

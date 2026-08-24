@@ -1,5 +1,16 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { webhookService, WebhookEventType, WebhookDeliveryStatus } from "../../services/webhook.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  CreateWebhookEndpointBodySchema,
+  UpdateWebhookEndpointBodySchema,
+  WebhookEndpointParamsSchema,
+  WebhookDeliveryQuerySchema,
+  QueueDeliveryBodySchema,
+  QueueBatchDeliveryBodySchema,
+  VerifySignatureBodySchema,
+  DeliveryLogsQuerySchema,
+} from "../validations/webhooks.schema.js";
 
 // =============================================================================
 // TYPES
@@ -57,6 +68,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Create a new webhook endpoint
   server.post<{ Body: CreateEndpointBody }>(
     "/endpoints",
+    {
+      preHandler: validateRequest({ body: CreateWebhookEndpointBodySchema }),
+    },
     async (request: FastifyRequest<{ Body: CreateEndpointBody }>, reply: FastifyReply) => {
       try {
         const endpoint = await webhookService.createEndpoint(request.body);
@@ -86,6 +100,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Get a specific webhook endpoint
   server.get<{ Params: EndpointParams }>(
     "/endpoints/:id",
+    {
+      preHandler: validateRequest({ params: WebhookEndpointParamsSchema }),
+    },
     async (request: FastifyRequest<{ Params: EndpointParams }>, reply: FastifyReply) => {
       const endpoint = await webhookService.getEndpoint(request.params.id);
       if (!endpoint) {
@@ -98,6 +115,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Update a webhook endpoint
   server.patch<{ Params: EndpointParams; Body: UpdateEndpointBody }>(
     "/endpoints/:id",
+    {
+      preHandler: validateRequest({ params: WebhookEndpointParamsSchema, body: UpdateWebhookEndpointBodySchema }),
+    },
     async (request: FastifyRequest<{ Params: EndpointParams; Body: UpdateEndpointBody }>, reply: FastifyReply) => {
       try {
         const endpoint = await webhookService.updateEndpoint(request.params.id, request.body);
@@ -115,6 +135,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Delete a webhook endpoint
   server.delete<{ Params: EndpointParams }>(
     "/endpoints/:id",
+    {
+      preHandler: validateRequest({ params: WebhookEndpointParamsSchema }),
+    },
     async (request: FastifyRequest<{ Params: EndpointParams }>, reply: FastifyReply) => {
       const deleted = await webhookService.deleteEndpoint(request.params.id);
       if (!deleted) {
@@ -131,6 +154,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Rotate the secret for a webhook endpoint
   server.post<{ Params: EndpointParams }>(
     "/endpoints/:id/rotate-secret",
+    {
+      preHandler: validateRequest({ params: WebhookEndpointParamsSchema }),
+    },
     async (request: FastifyRequest<{ Params: EndpointParams }>, reply: FastifyReply) => {
       try {
         const newSecret = await webhookService.rotateSecret(request.params.id);
@@ -149,6 +175,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Queue a webhook delivery (for testing or manual triggers)
   server.post<{ Body: { webhookEndpointId: string; eventType: WebhookEventType; payload: Record<string, any> } }>(
     "/deliver",
+    {
+      preHandler: validateRequest({ body: QueueDeliveryBodySchema }),
+    },
     async (request: FastifyRequest<{ Body: { webhookEndpointId: string; eventType: WebhookEventType; payload: Record<string, any> } }>, reply: FastifyReply) => {
       try {
         const { webhookEndpointId, eventType, payload } = request.body;
@@ -164,6 +193,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Queue a batch webhook delivery
   server.post<{ Body: BatchDeliveryBody }>(
     "/deliver/batch",
+    {
+      preHandler: validateRequest({ body: QueueBatchDeliveryBodySchema }),
+    },
     async (request: FastifyRequest<{ Body: BatchDeliveryBody }>, reply: FastifyReply) => {
       try {
         const { webhookEndpointId, eventType, events } = request.body;
@@ -191,6 +223,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // List deliveries for an endpoint
   server.get<{ Params: { endpointId: string }; Querystring: DeliveryQuery }>(
     "/endpoints/:endpointId/deliveries",
+    {
+      preHandler: validateRequest({ query: WebhookDeliveryQuerySchema }),
+    },
     async (request: FastifyRequest<{ Params: { endpointId: string }; Querystring: DeliveryQuery }>, reply: FastifyReply) => {
       try {
         const { status, limit } = request.query;
@@ -206,6 +241,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Get delivery logs
   server.get<{ Params: { deliveryId: string }; Querystring: { limit?: number } }>(
     "/deliveries/:deliveryId/logs",
+    {
+      preHandler: validateRequest({ query: DeliveryLogsQuerySchema }),
+    },
     async (request: FastifyRequest<{ Params: { deliveryId: string }; Querystring: { limit?: number } }>, reply: FastifyReply) => {
       try {
         const logs = await webhookService.getDeliveryLogs(request.params.deliveryId, request.query.limit);
@@ -238,6 +276,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Send a test webhook to verify endpoint configuration
   server.post<{ Params: EndpointParams }>(
     "/endpoints/:id/test",
+    {
+      preHandler: validateRequest({ params: WebhookEndpointParamsSchema }),
+    },
     async (request: FastifyRequest<{ Params: EndpointParams }>, reply: FastifyReply) => {
       try {
         const result = await webhookService.sendTestDelivery(request.params.id);
@@ -270,6 +311,9 @@ export async function webhooksRoutes(server: FastifyInstance) {
   // Verify a webhook signature
   server.post<{ Body: { payload: string; signature: string; timestamp: string; secret: string } }>(
     "/verify",
+    {
+      preHandler: validateRequest({ body: VerifySignatureBodySchema }),
+    },
     async (request: FastifyRequest<{ Body: { payload: string; signature: string; timestamp: string; secret: string } }>, reply: FastifyReply) => {
       const { payload, signature, timestamp, secret } = request.body;
       const isValid = webhookService.verifySignature(payload, signature, timestamp, secret);

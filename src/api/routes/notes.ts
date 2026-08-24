@@ -1,5 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { OperatorNotesService } from "../../services/operatorNotes.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  CreateNoteBodySchema,
+  UpdateNoteBodySchema,
+  NoteIdParamsSchema,
+  DeleteNoteQuerySchema,
+  SearchNotesQuerySchema,
+  NoteEntityParamsSchema,
+  NoteOperatorParamsSchema,
+} from "../validations/notes.schema.js";
 
 export async function operatorNotesRoutes(server: FastifyInstance) {
   const notesService = new OperatorNotesService();
@@ -14,10 +24,11 @@ export async function operatorNotesRoutes(server: FastifyInstance) {
       category?: string;
       isInternal?: boolean;
     };
-  }>("/", async (request, reply) => {
+  }>("/", { preHandler: validateRequest({ body: CreateNoteBodySchema }) }, async (request, reply) => {
     const { entityType, entityId, operatorAddress, content, category, isInternal } =
       request.body;
 
+    // validation already enforced by schema; guard kept for type-narrowing only
     if (!entityType || !entityId || !operatorAddress || !content) {
       return reply.status(400).send({
         error: "Missing required fields: entityType, entityId, operatorAddress, content",
@@ -39,9 +50,11 @@ export async function operatorNotesRoutes(server: FastifyInstance) {
   // GET /api/v1/notes/search?q=query
   server.get<{ Querystring: { q?: string; limit?: string } }>(
     "/search",
+    { preHandler: validateRequest({ query: SearchNotesQuerySchema }) },
     async (request, reply) => {
       const { q, limit } = request.query;
 
+      // already validated by schema; kept for type-narrowing
       if (!q) {
         return reply.status(400).send({ error: "Query parameter 'q' is required" });
       }
@@ -55,6 +68,7 @@ export async function operatorNotesRoutes(server: FastifyInstance) {
   // GET /api/v1/notes/:id
   server.get<{ Params: { id: string } }>(
     "/:id",
+    { preHandler: validateRequest({ params: NoteIdParamsSchema }) },
     async (request, reply) => {
       const note = await notesService.getNote(request.params.id);
       if (!note) {
@@ -73,10 +87,11 @@ export async function operatorNotesRoutes(server: FastifyInstance) {
       category?: string;
       isInternal?: boolean;
     };
-  }>("/:id", async (request, reply) => {
+  }>("/:id", { preHandler: validateRequest({ params: NoteIdParamsSchema, body: UpdateNoteBodySchema }) }, async (request, reply) => {
     const { id } = request.params;
     const { operatorAddress, ...updates } = request.body;
 
+    // already validated by schema; kept for type-narrowing
     if (!operatorAddress) {
       return reply.status(400).send({ error: "operatorAddress is required" });
     }
@@ -93,10 +108,11 @@ export async function operatorNotesRoutes(server: FastifyInstance) {
   server.delete<{
     Params: { id: string };
     Querystring: { operatorAddress: string };
-  }>("/:id", async (request, reply) => {
+  }>("/:id", { preHandler: validateRequest({ params: NoteIdParamsSchema, query: DeleteNoteQuerySchema }) }, async (request, reply) => {
     const { id } = request.params;
     const { operatorAddress } = request.query;
 
+    // already validated by schema; kept for type-narrowing
     if (!operatorAddress) {
       return reply.status(400).send({ error: "operatorAddress query param is required" });
     }
@@ -112,7 +128,7 @@ export async function operatorNotesRoutes(server: FastifyInstance) {
   // GET /api/v1/notes/entity/:entityType/:entityId
   server.get<{
     Params: { entityType: string; entityId: string };
-  }>("/entity/:entityType/:entityId", async (request, reply) => {
+  }>("/entity/:entityType/:entityId", { preHandler: validateRequest({ params: NoteEntityParamsSchema }) }, async (request, reply) => {
     const { entityType, entityId } = request.params;
     const notes = await notesService.getNotesForEntity(entityType, entityId);
     return { notes };
@@ -121,7 +137,7 @@ export async function operatorNotesRoutes(server: FastifyInstance) {
   // GET /api/v1/notes/operator/:operatorAddress
   server.get<{
     Params: { operatorAddress: string };
-  }>("/operator/:operatorAddress", async (request, reply) => {
+  }>("/operator/:operatorAddress", { preHandler: validateRequest({ params: NoteOperatorParamsSchema }) }, async (request, reply) => {
     const { operatorAddress } = request.params;
     const notes = await notesService.getNotesByOperator(operatorAddress);
     return { notes };

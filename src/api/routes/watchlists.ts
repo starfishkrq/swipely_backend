@@ -1,5 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { WatchlistsService } from "../../services/watchlists.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  WatchlistUserParamsSchema,
+  WatchlistIdParamsSchema,
+  CreateWatchlistBodySchema,
+  UpdateWatchlistBodySchema,
+} from "../validations/watchlists.schema.js";
 
 const userIdParamSchema = {
   type: "object",
@@ -24,6 +31,7 @@ export async function watchlistsRoutes(server: FastifyInstance) {
   server.get<{ Params: { userId: string } }>(
     "/:userId",
     {
+      preHandler: validateRequest({ params: WatchlistUserParamsSchema }),
       schema: {
         tags: ["Watchlists"],
         summary: "Get all watchlists for a user",
@@ -51,6 +59,7 @@ export async function watchlistsRoutes(server: FastifyInstance) {
   }>(
     "/:userId",
     {
+      preHandler: validateRequest({ params: WatchlistUserParamsSchema, body: CreateWatchlistBodySchema }),
       schema: {
         tags: ["Watchlists"],
         summary: "Create a watchlist",
@@ -90,6 +99,7 @@ export async function watchlistsRoutes(server: FastifyInstance) {
   server.delete<{ Params: { userId: string; id: string } }>(
     "/:userId/:id",
     {
+      preHandler: validateRequest({ params: WatchlistIdParamsSchema }),
       schema: {
         tags: ["Watchlists"],
         summary: "Delete a watchlist",
@@ -115,6 +125,7 @@ export async function watchlistsRoutes(server: FastifyInstance) {
   }>(
     "/:userId/:id",
     {
+      preHandler: validateRequest({ params: WatchlistIdParamsSchema, body: UpdateWatchlistBodySchema }),
       schema: {
         tags: ["Watchlists"],
         summary: "Update a watchlist",

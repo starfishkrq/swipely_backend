@@ -2,6 +2,15 @@ import type { FastifyInstance } from "fastify";
 import { BridgeService } from "../../services/bridge.service.js";
 import { BridgeTransactionService } from "../../services/bridgeTransaction.service.js";
 import { bridgeHealthSnapshotService } from "../../services/bridgeHealthSnapshot.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  BridgeParamsSchema,
+  BridgeTxParamsSchema,
+  BridgeSnapshotQuerySchema,
+  BridgeTransactionsQuerySchema,
+  CreateBridgeTransactionBodySchema,
+  UpdateBridgeTxStatusBodySchema,
+} from "../validations/bridges.schema.js";
 
 export async function bridgesRoutes(server: FastifyInstance) {
   const bridgeService = new BridgeService();
@@ -10,6 +19,7 @@ export async function bridgesRoutes(server: FastifyInstance) {
   server.get<{ Querystring: { bypassCache?: boolean } }>(
     "/snapshot",
     {
+      preHandler: validateRequest({ query: BridgeSnapshotQuerySchema }),
       schema: {
         tags: ["Bridges"],
         summary: "Bridge health snapshot with trend summary",
@@ -52,6 +62,7 @@ export async function bridgesRoutes(server: FastifyInstance) {
   server.get<{ Params: { bridge: string } }>(
     "/:bridge/stats",
     {
+      preHandler: validateRequest({ params: BridgeParamsSchema }),
       schema: {
         tags: ["Bridges"],
         summary: "Get bridge statistics",
@@ -79,6 +90,7 @@ export async function bridgesRoutes(server: FastifyInstance) {
   server.get<{ Params: { bridge: string }; Querystring: { status?: string } }>(
     "/:bridge/transactions",
     {
+      preHandler: validateRequest({ params: BridgeParamsSchema, query: BridgeTransactionsQuerySchema }),
       schema: {
         tags: ["Bridges"],
         summary: "List bridge transactions",
@@ -107,6 +119,7 @@ export async function bridgesRoutes(server: FastifyInstance) {
   server.get<{ Params: { bridge: string; txHash: string } }>(
     "/:bridge/transactions/:txHash",
     {
+      preHandler: validateRequest({ params: BridgeTxParamsSchema }),
       schema: {
         tags: ["Bridges"],
         summary: "Get a bridge transaction by hash",
@@ -137,6 +150,7 @@ export async function bridgesRoutes(server: FastifyInstance) {
   server.post<{ Params: { bridge: string }; Body: Record<string, unknown> }>(
     "/:bridge/transactions",
     {
+      preHandler: validateRequest({ params: BridgeParamsSchema, body: CreateBridgeTransactionBodySchema }),
       schema: {
         tags: ["Bridges"],
         summary: "Create a bridge transaction record",
@@ -205,6 +219,7 @@ export async function bridgesRoutes(server: FastifyInstance) {
   server.patch<{ Params: { bridge: string; txHash: string }; Body: { status: string; errorMessage?: string } }>(
     "/:bridge/transactions/:txHash/status",
     {
+      preHandler: validateRequest({ params: BridgeTxParamsSchema, body: UpdateBridgeTxStatusBodySchema }),
       schema: {
         tags: ["Bridges"],
         summary: "Update a bridge transaction status",
@@ -244,6 +259,7 @@ export async function bridgesRoutes(server: FastifyInstance) {
   server.get<{ Params: { bridge: string } }>(
     "/:bridge/transactions/metrics",
     {
+      preHandler: validateRequest({ params: BridgeParamsSchema }),
       schema: {
         tags: ["Bridges"],
         summary: "Get bridge transaction metrics",
