@@ -4,10 +4,21 @@ import {
   MaintenanceScope,
   MaintenanceStatus,
 } from "../../services/maintenance.service";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  MaintenanceWindowIdParamsSchema,
+  CreateMaintenanceWindowBodySchema,
+  UpdateMaintenanceWindowBodySchema,
+  ApproveMaintenanceWindowBodySchema,
+  CancelMaintenanceWindowBodySchema,
+  CheckSuppressionBodySchema,
+  UpcomingWindowsQuerySchema,
+  ListMaintenanceWindowsQuerySchema,
+} from "../validations/maintenance.schema.js";
 
 export async function maintenanceRoutes(server: FastifyInstance) {
   // Create maintenance window
-  server.post("/", async (request, reply) => {
+  server.post("/", { preHandler: validateRequest({ body: CreateMaintenanceWindowBodySchema }) }, async (request, reply) => {
     const window = await maintenanceService.createWindow(request.body as any);
     return reply.code(201).send(window);
   });
@@ -15,6 +26,7 @@ export async function maintenanceRoutes(server: FastifyInstance) {
   // Get maintenance window
   server.get<{ Params: { windowId: string } }>(
     "/:windowId",
+    { preHandler: validateRequest({ params: MaintenanceWindowIdParamsSchema }) },
     async (request, reply) => {
       const window = await maintenanceService.getWindow(
         request.params.windowId,
@@ -30,7 +42,7 @@ export async function maintenanceRoutes(server: FastifyInstance) {
   server.patch<{
     Params: { windowId: string };
     Body: { updates: any; updatedBy: string };
-  }>("/:windowId", async (request, reply) => {
+  }>("/:windowId", { preHandler: validateRequest({ params: MaintenanceWindowIdParamsSchema, body: UpdateMaintenanceWindowBodySchema }) }, async (request, reply) => {
     const window = await maintenanceService.updateWindow(
       request.params.windowId,
       request.body.updates,
@@ -45,6 +57,7 @@ export async function maintenanceRoutes(server: FastifyInstance) {
   // Approve maintenance window
   server.post<{ Params: { windowId: string }; Body: { approvedBy: string } }>(
     "/:windowId/approve",
+    { preHandler: validateRequest({ params: MaintenanceWindowIdParamsSchema, body: ApproveMaintenanceWindowBodySchema }) },
     async (request, reply) => {
       await maintenanceService.approveWindow(
         request.params.windowId,
@@ -57,6 +70,7 @@ export async function maintenanceRoutes(server: FastifyInstance) {
   // Cancel maintenance window
   server.post<{ Params: { windowId: string }; Body: { cancelledBy: string } }>(
     "/:windowId/cancel",
+    { preHandler: validateRequest({ params: MaintenanceWindowIdParamsSchema, body: CancelMaintenanceWindowBodySchema }) },
     async (request, reply) => {
       await maintenanceService.cancelWindow(
         request.params.windowId,
@@ -73,14 +87,14 @@ export async function maintenanceRoutes(server: FastifyInstance) {
   });
 
   // Get upcoming windows
-  server.get("/upcoming", async (request, _reply) => {
+  server.get("/upcoming", { preHandler: validateRequest({ query: UpcomingWindowsQuerySchema }) }, async (request, _reply) => {
     const limit = (request.query as any).limit || 10;
     const windows = await maintenanceService.getUpcomingWindows(limit);
     return { windows, total: windows.length };
   });
 
   // Get all windows with filters
-  server.get("/", async (request, _reply) => {
+  server.get("/", { preHandler: validateRequest({ query: ListMaintenanceWindowsQuerySchema }) }, async (request, _reply) => {
     const filters = request.query as any;
     const windows = await maintenanceService.getAllWindows(filters);
     return { windows, total: windows.length };
@@ -89,6 +103,7 @@ export async function maintenanceRoutes(server: FastifyInstance) {
   // Get audit trail
   server.get<{ Params: { windowId: string } }>(
     "/:windowId/audit",
+    { preHandler: validateRequest({ params: MaintenanceWindowIdParamsSchema }) },
     async (request, _reply) => {
       const trail = await maintenanceService.getAuditTrail(
         request.params.windowId,
@@ -98,7 +113,7 @@ export async function maintenanceRoutes(server: FastifyInstance) {
   );
 
   // Check alert suppression
-  server.post("/check-suppression", async (request, _reply) => {
+  server.post("/check-suppression", { preHandler: validateRequest({ body: CheckSuppressionBodySchema }) }, async (request, _reply) => {
     const { alertType, scope } = request.body as any;
     const suppressed = await maintenanceService.shouldSuppressAlert(
       alertType,

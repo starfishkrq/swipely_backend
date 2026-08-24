@@ -4,6 +4,17 @@ import { LiquidityService } from "../../services/liquidity.service.js";
 import { PriceService } from "../../services/price.service.js";
 import { assetTagService } from "../../services/assetTag.service.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  AssetSymbolParamsSchema,
+  AssetHealthHistoryQuerySchema,
+  CreateTagBodySchema,
+  UpdateTagBodySchema,
+  TagIdParamsSchema,
+  BulkAssignTagsBodySchema,
+  AssignTagsToAssetBodySchema,
+  AssetTagParamsSchema,
+} from "../validations/assets.schema.js";
 
 function getAuditActorType(source: "api-key" | "bootstrap" | undefined): "user" | "api_key" | "system" {
   if (source === "api-key") return "api_key";
@@ -44,6 +55,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.get<{ Params: { symbol: string } }>(
     "/:symbol",
     {
+      preHandler: validateRequest({ params: AssetSymbolParamsSchema }),
       schema: {
         tags: ["Assets"],
         summary: "Get asset details",
@@ -77,6 +89,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.get<{ Params: { symbol: string } }>(
     "/:symbol/health",
     {
+      preHandler: validateRequest({ params: AssetSymbolParamsSchema }),
       schema: {
         tags: ["Assets"],
         summary: "Get current health score",
@@ -108,6 +121,10 @@ export async function assetsRoutes(server: FastifyInstance) {
   }>(
     "/:symbol/health/history",
     {
+      preHandler: validateRequest({
+        params: AssetSymbolParamsSchema,
+        query: AssetHealthHistoryQuerySchema,
+      }),
       schema: {
         tags: ["Assets"],
         summary: "Get health score history",
@@ -165,6 +182,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.get<{ Params: { symbol: string } }>(
     "/:symbol/liquidity",
     {
+      preHandler: validateRequest({ params: AssetSymbolParamsSchema }),
       schema: {
         tags: ["Assets"],
         summary: "Get aggregated liquidity",
@@ -192,6 +210,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.get<{ Params: { symbol: string } }>(
     "/:symbol/price",
     {
+      preHandler: validateRequest({ params: AssetSymbolParamsSchema }),
       schema: {
         tags: ["Assets"],
         summary: "Get aggregated price",
@@ -228,6 +247,9 @@ export async function assetsRoutes(server: FastifyInstance) {
   // Get tag details
   server.get<{ Params: { id: string } }>(
     "/tags/:id",
+    {
+      preHandler: validateRequest({ params: TagIdParamsSchema }),
+    },
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       const tag = await assetTagService.getTagById(id);
@@ -242,7 +264,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.post<{ Body: { name: string; color?: string | null } }>(
     "/tags",
     {
-      preHandler: authMiddleware({ requiredScopes: ["assets:write"] }),
+      preHandler: [authMiddleware({ requiredScopes: ["assets:write"] }), validateRequest({ body: CreateTagBodySchema })],
     },
     async (request: FastifyRequest<{ Body: { name: string; color?: string | null } }>, reply: FastifyReply) => {
       try {
@@ -262,7 +284,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.put<{ Params: { id: string }; Body: { name?: string; color?: string | null } }>(
     "/tags/:id",
     {
-      preHandler: authMiddleware({ requiredScopes: ["assets:write"] }),
+      preHandler: [authMiddleware({ requiredScopes: ["assets:write"] }), validateRequest({ params: TagIdParamsSchema, body: UpdateTagBodySchema })],
     },
     async (request: FastifyRequest<{ Params: { id: string }; Body: { name?: string; color?: string | null } }>, reply: FastifyReply) => {
       try {
@@ -282,7 +304,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.delete<{ Params: { id: string } }>(
     "/tags/:id",
     {
-      preHandler: authMiddleware({ requiredScopes: ["assets:write"] }),
+      preHandler: [authMiddleware({ requiredScopes: ["assets:write"] }), validateRequest({ params: TagIdParamsSchema })],
     },
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       try {
@@ -302,7 +324,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.post<{ Body: { assetSymbols: string[]; tagNames: string[] } }>(
     "/tags/bulk-assign",
     {
-      preHandler: authMiddleware({ requiredScopes: ["assets:write"] }),
+      preHandler: [authMiddleware({ requiredScopes: ["assets:write"] }), validateRequest({ body: BulkAssignTagsBodySchema })],
     },
     async (request: FastifyRequest<{ Body: { assetSymbols: string[]; tagNames: string[] } }>, reply: FastifyReply) => {
       try {
@@ -321,6 +343,9 @@ export async function assetsRoutes(server: FastifyInstance) {
   // Get tags for an asset symbol
   server.get<{ Params: { symbol: string } }>(
     "/:symbol/tags",
+    {
+      preHandler: validateRequest({ params: AssetSymbolParamsSchema }),
+    },
     async (request: FastifyRequest<{ Params: { symbol: string } }>, reply: FastifyReply) => {
       try {
         const { symbol } = request.params;
@@ -337,7 +362,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.post<{ Params: { symbol: string }; Body: { tags: string[] } }>(
     "/:symbol/tags",
     {
-      preHandler: authMiddleware({ requiredScopes: ["assets:write"] }),
+      preHandler: [authMiddleware({ requiredScopes: ["assets:write"] }), validateRequest({ params: AssetSymbolParamsSchema, body: AssignTagsToAssetBodySchema })],
     },
     async (request: FastifyRequest<{ Params: { symbol: string }; Body: { tags: string[] } }>, reply: FastifyReply) => {
       try {
@@ -363,7 +388,7 @@ export async function assetsRoutes(server: FastifyInstance) {
   server.delete<{ Params: { symbol: string; tagName: string } }>(
     "/:symbol/tags/:tagName",
     {
-      preHandler: authMiddleware({ requiredScopes: ["assets:write"] }),
+      preHandler: [authMiddleware({ requiredScopes: ["assets:write"] }), validateRequest({ params: AssetTagParamsSchema })],
     },
     async (request: FastifyRequest<{ Params: { symbol: string; tagName: string } }>, reply: FastifyReply) => {
       try {

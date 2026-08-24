@@ -7,6 +7,16 @@ import {
   type RuleCondition,
   type TimeWindow,
 } from "../../services/alertRules.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  CreateAlertRuleBodySchema,
+  UpdateAlertRuleBodySchema,
+  SetAlertRuleStatusBodySchema,
+  TestAlertRuleBodySchema,
+  EvaluateAlertRulesBodySchema,
+  AlertRuleIdParamsSchema,
+  ListAlertRulesQuerySchema,
+} from "../validations/alertRules.schema.js";
 
 // =============================================================================
 // TYPES
@@ -87,6 +97,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.post<{ Body: CreateRuleBody }>(
     "/",
+    { preHandler: validateRequest({ body: CreateAlertRuleBodySchema }) },
     async (request: FastifyRequest<{ Body: CreateRuleBody }>, reply: FastifyReply) => {
       try {
         const rule = await alertRulesService.createRule(request.body);
@@ -104,6 +115,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.get<{ Querystring: ListRulesQuery }>(
     "/",
+    { preHandler: validateRequest({ query: ListAlertRulesQuerySchema }) },
     async (request: FastifyRequest<{ Querystring: ListRulesQuery }>) =>
       alertRulesService.listRules(request.query)
   );
@@ -114,6 +126,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.get<{ Params: RuleParams }>(
     "/:id",
+    { preHandler: validateRequest({ params: AlertRuleIdParamsSchema }) },
     async (request: FastifyRequest<{ Params: RuleParams }>, reply: FastifyReply) => {
       const rule = await alertRulesService.getRule(request.params.id);
       if (!rule) return reply.code(404).send({ error: "Rule not found" });
@@ -127,6 +140,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.patch<{ Params: RuleParams; Body: UpdateRuleBody }>(
     "/:id",
+    { preHandler: validateRequest({ params: AlertRuleIdParamsSchema, body: UpdateAlertRuleBodySchema }) },
     async (request: FastifyRequest<{ Params: RuleParams; Body: UpdateRuleBody }>, reply: FastifyReply) => {
       try {
         const { changedBy, ...updates } = request.body;
@@ -146,6 +160,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.post<{ Params: RuleParams; Body: { status: AlertRuleStatus } }>(
     "/:id/status",
+    { preHandler: validateRequest({ params: AlertRuleIdParamsSchema, body: SetAlertRuleStatusBodySchema }) },
     async (
       request: FastifyRequest<{ Params: RuleParams; Body: { status: AlertRuleStatus } }>,
       reply: FastifyReply
@@ -162,6 +177,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.delete<{ Params: RuleParams }>(
     "/:id",
+    { preHandler: validateRequest({ params: AlertRuleIdParamsSchema }) },
     async (request: FastifyRequest<{ Params: RuleParams }>, reply: FastifyReply) => {
       const deleted = await alertRulesService.deleteRule(request.params.id);
       if (!deleted) return reply.code(404).send({ error: "Rule not found" });
@@ -175,6 +191,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.get<{ Params: RuleParams }>(
     "/:id/versions",
+    { preHandler: validateRequest({ params: AlertRuleIdParamsSchema }) },
     async (request: FastifyRequest<{ Params: RuleParams }>, reply: FastifyReply) => {
       try {
         const history = await alertRulesService.getVersionHistory(request.params.id);
@@ -192,6 +209,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.post<{ Params: RuleParams; Body: TestRuleBody }>(
     "/:id/test",
+    { preHandler: validateRequest({ params: AlertRuleIdParamsSchema, body: TestAlertRuleBodySchema }) },
     async (request: FastifyRequest<{ Params: RuleParams; Body: TestRuleBody }>, reply: FastifyReply) => {
       try {
         const result = await alertRulesService.testRule(
@@ -213,6 +231,7 @@ export async function alertRulesRoutes(server: FastifyInstance) {
 
   server.post<{ Body: EvaluateBody }>(
     "/evaluate",
+    { preHandler: validateRequest({ body: EvaluateAlertRulesBodySchema }) },
     async (request: FastifyRequest<{ Body: EvaluateBody }>, reply: FastifyReply) => {
       try {
         const { assetCode, metrics, previousMetrics } = request.body;

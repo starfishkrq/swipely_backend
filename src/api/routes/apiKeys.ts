@@ -1,6 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { authMiddleware } from "../middleware/auth.js";
 import { ApiKeyService } from "../../services/apiKey.service.js";
+import { validateRequest } from "../middleware/validation.js";
+import {
+  CreateApiKeyBodySchema,
+  ExtendApiKeyBodySchema,
+  ApiKeyIdParamsSchema,
+} from "../validations/apiKeys.schema.js";
 
 interface CreateApiKeyBody {
   name: string;
@@ -24,7 +30,7 @@ export async function apiKeysRoutes(server: FastifyInstance) {
 
   server.post<{ Body: CreateApiKeyBody }>(
     "/",
-    { preHandler: requireAdmin },
+    { preHandler: [requireAdmin, validateRequest({ body: CreateApiKeyBodySchema })] },
     async (request, reply) => {
       const { name, scopes = [], rateLimitPerMinute, expiresInDays } = request.body;
       if (!name?.trim()) {
@@ -53,7 +59,7 @@ export async function apiKeysRoutes(server: FastifyInstance) {
 
   server.post<{ Params: { id: string } }>(
     "/:id/rotate",
-    { preHandler: requireAdmin },
+    { preHandler: [requireAdmin, validateRequest({ params: ApiKeyIdParamsSchema })] },
     async (request) => {
       return apiKeyService.rotateKey(
         request.params.id,
@@ -64,7 +70,7 @@ export async function apiKeysRoutes(server: FastifyInstance) {
 
   server.post<{ Params: { id: string } }>(
     "/:id/revoke",
-    { preHandler: requireAdmin },
+    { preHandler: [requireAdmin, validateRequest({ params: ApiKeyIdParamsSchema })] },
     async (request) => {
       const key = await apiKeyService.revokeKey(
         request.params.id,
@@ -76,7 +82,7 @@ export async function apiKeysRoutes(server: FastifyInstance) {
 
   server.post<{ Params: { id: string }; Body: ExtendApiKeyBody }>(
     "/:id/extend",
-    { preHandler: requireAdmin },
+    { preHandler: [requireAdmin, validateRequest({ params: ApiKeyIdParamsSchema, body: ExtendApiKeyBodySchema })] },
     async (request, reply) => {
       const extraDays = Number(request.body?.extraDays ?? 0);
       if (extraDays < 1) {
